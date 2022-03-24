@@ -191,7 +191,7 @@ func DeletePosStore(c *fiber.Ctx) error {
 	}
 
 	update := bson.M{
-		"is_deleted": false}
+		"is_deleted": true}
 
 	var s models.PosStoresSchema
 
