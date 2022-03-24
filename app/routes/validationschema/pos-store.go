@@ -4,6 +4,8 @@ import (
 
 	//validate "gopkg.in/dealancer/validate.v2"
 
+	"log"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
@@ -84,9 +86,12 @@ func DeletePosStoreValidate(c *fiber.Ctx) error {
 
 	var data MainDeletedata
 
-	c.BodyParser(&data)
+	err := c.BodyParser(&data)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err := validate.Struct(&data)
+	err = validate.Struct(&data)
 	if err != nil {
 		var errors []Ierror
 
@@ -102,7 +107,7 @@ func DeletePosStoreValidate(c *fiber.Ctx) error {
 
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
 			"Status":         false,
-			"Message":        "Input vallidation error",
+			"Message":        "Input validation error",
 			"Error_response": errors,
 		})
 	}

@@ -1,6 +1,11 @@
 package models
 
-import "github.com/kamva/mgm/v3"
+import (
+	"context"
+
+	"github.com/kamva/mgm/v3"
+	"go.mongodb.org/mongo-driver/bson"
+)
 
 // DB schema - struct to store a data as a format in db
 type (
@@ -44,3 +49,76 @@ type (
 		User_info User_Info       `json:"user_info"`
 	}
 )
+
+func (store PosStoresSchema) CreateStore() map[string]interface{} {
+
+	err := mgm.CollectionByName("stores").Create(&store)
+	if err != nil {
+		return map[string]interface{}{
+			"status":     false,
+			"message":    "error while adding the data",
+			"error_code": "STORE_NOT_CREATED",
+		}
+	}
+
+	return map[string]interface{}{
+		"status":  true,
+		"message": "data added successfully",
+	}
+}
+
+func (store PosStoresSchema) FindStores(filter map[string]interface{}) map[string]interface{} {
+
+	var stores []PosStoresSchema
+
+	err := mgm.CollectionByName("stores").SimpleFind(&stores, filter)
+	if err != nil {
+		return map[string]interface{}{
+			"status":     false,
+			"message":    "error while retriving the data",
+			"error_code": "NO_SOTRE_DATA_FOUND",
+		}
+	}
+
+	return map[string]interface{}{
+		"status":  true,
+		"message": "data retrived successfully",
+		"data":    stores,
+	}
+}
+
+func (store PosStoresSchema) UpdateStore(filter map[string]interface{}, updateData ...map[string]interface{}) map[string]interface{} {
+
+	if updateData != nil {
+
+		res, err := mgm.CollectionByName("stores").UpdateOne(context.Background(), filter, bson.M{"$set": updateData[0]})
+		if err != nil {
+			return map[string]interface{}{
+				"status":     false,
+				"message":    "error while updating the data",
+				"error_code": "ERROR_WHILE_DATA_UPDATE",
+			}
+		}
+
+		return map[string]interface{}{
+			"status":        true,
+			"message":       "data retrived successfully",
+			"matched_count": res.MatchedCount,
+		}
+	}
+
+	res, err := mgm.CollectionByName("stores").UpdateOne(context.Background(), filter, bson.M{"$set": store})
+	if err != nil {
+		return map[string]interface{}{
+			"status":     false,
+			"message":    "error while updating the data",
+			"error_code": "ERROR_WHILE_DATA_UPDATE",
+		}
+	}
+
+	return map[string]interface{}{
+		"status":        true,
+		"message":       "data retrived successfully",
+		"matched_count": res.MatchedCount,
+	}
+}

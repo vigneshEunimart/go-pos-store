@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 
@@ -44,40 +43,38 @@ func CreatePosStore(c *fiber.Ctx) error {
 		data.Data.Transition = "Exclusive tax"
 	}
 
-	filter := bson.M{
-		"address.state": data.Data.Address.State,
-		"gst_number":    data.Data.Gst_number,
+	filter := fiber.Map{
+		"address.state": fiber.Map{"$ne": data.Data.Address.State},
+		//"address.state": data.Data.Address.State,
+		"gst_number": data.Data.Gst_number,
 	}
 
-	var check []models.PosStoresSchema
-
-	err = mgm.CollectionByName("stores").SimpleFind(&check, filter)
-	if err != nil {
-		c.Locals("status", false)
-		c.Locals("message", "error while fetching the data")
-		c.Locals("error_obj", errorCodes.Error_codes("NO_SOTRE_DATA_FOUND"))
+	result := data.Data.FindStores(filter)
+	if !result["status"].(bool) {
+		c.Locals("status", result["status"])
+		c.Locals("message", result["message"])
+		c.Locals("error_obj", errorCodes.Error_codes(result["error_code"].(string)))
 		return c.Next()
 	}
 
-	if check != nil {
+	if len(result["data"].([]models.PosStoresSchema)) > 0 {
 		c.Locals("status", false)
 		c.Locals("message", "gst number already exists")
 		c.Locals("error_obj", errorCodes.Error_codes("GST_EXISTS_ALREADY"))
 		return c.Next()
 	}
-	var add *models.PosStoresSchema = &data.Data
 
-	err = mgm.CollectionByName("stores").Create(add)
-	if err != nil {
+	res := data.Data.CreateStore()
+	if !res["status"].(bool) {
 		c.Locals("status", false)
 		c.Locals("message", "error while adding the data")
-		c.Locals("error_obj", errorCodes.Error_codes("STORE_NOT_CREATED"))
+		c.Locals("error_obj", errorCodes.Error_codes(res["error_code"].(string)))
 		return c.Next()
 	}
 
 	c.Locals("status", true)
 	c.Locals("message", "successfully added")
-	c.Locals("data", add)
+	c.Locals("data", data.Data)
 	return c.Next()
 }
 
@@ -95,42 +92,43 @@ func UpdatePosStore(c *fiber.Ctx) error {
 
 	data.Data.Updated_by = data.User_info.UserId
 
-	gstFliter := bson.M{
-		"address.state": data.Data.Address.State,
-		"gst_number":    data.Data.Gst_number,
-		"store_id":      data.Data.Store_id,
+	gstFilter := fiber.Map{
+		"address.state": fiber.Map{
+			"$ne": data.Data.Address.State,
+		},
+		"gst_number": data.Data.Gst_number,
+		"store_id": fiber.Map{
+			"$ne": data.Data.Store_id,
+		},
 	}
 
-	filter := bson.M{
+	filter := fiber.Map{
 		"account_id": data.Data.Account_id,
 		"store_id":   data.Data.Store_id,
 	}
 
-	var check []models.PosStoresSchema
+	result := data.Data.FindStores(gstFilter)
 
-	_ = mgm.CollectionByName("stores").SimpleFind(&check, gstFliter)
-
-	//fmt.Println("....", check)
-	if len(check) <= 0 {
+	if len(result["data"].([]models.PosStoresSchema)) > 0 {
 		c.Locals("status", false)
-		c.Locals("message", "gst number not found")
+		c.Locals("message", "gst number found")
 		c.Locals("error_obj", errorCodes.Error_codes("GST_EXISTS_ALREADY"))
 		return c.Next()
 	}
 
-	data.Data.Created_by = check[0].Created_by
+	fmt.Println("....", result["data"].([]models.PosStoresSchema))
 
-	res, err := mgm.CollectionByName("stores").UpdateOne(context.Background(), filter, bson.M{"$set": data.Data})
-	if err != nil {
-		c.Locals("status", false)
-		c.Locals("message", "error while updating the data")
-		c.Locals("error_obj", errorCodes.Error_codes("ERROR_WHILE_DATA_UPDATE"))
+	update_res := data.Data.UpdateStore(filter)
+	if !update_res["status"].(bool) {
+		c.Locals("status", update_res["status"])
+		c.Locals("message", update_res["message"])
+		c.Locals("error_obj", errorCodes.Error_codes(update_res["error_code"].(string)))
 		return c.Next()
 	}
 
 	c.Locals("status", true)
 	c.Locals("message", "update successfully")
-	c.Locals("data", res)
+	c.Locals("data", data.Data)
 
 	return c.Next()
 }
@@ -138,7 +136,7 @@ func UpdatePosStore(c *fiber.Ctx) error {
 // To list the Pos Store Based on the demands or requirements
 func ListPosStores(c *fiber.Ctx) error {
 
-	filter := bson.M{
+	filter := fiber.Map{
 		"account_id": c.Query("account_id"),
 	}
 
@@ -157,19 +155,19 @@ func ListPosStores(c *fiber.Ctx) error {
 		filter["is_deleted"] = false
 	}
 
-	var result []models.PosStoresSchema
+	var res models.PosStoresSchema
 
-	err := mgm.CollectionByName("stores").SimpleFind(&result, filter)
-	if err != nil {
-		c.Locals("status", false)
-		c.Locals("message", "error while listing the data")
-		c.Locals("error_obj", errorCodes.Error_codes("NO_SOTRE_DATA_FOUND"))
+	result := res.FindStores(filter)
+	if !result["status"].(bool) {
+		c.Locals("status", result["status"])
+		c.Locals("message", result["message"])
+		c.Locals("error_obj", errorCodes.Error_codes(result["error_code"].(string)))
 		return c.Next()
 	}
 
 	c.Locals("status", true)
 	c.Locals("message", "data retrived successfully")
-	c.Locals("data", result)
+	c.Locals("data", result["data"])
 
 	return c.Next()
 }
@@ -187,25 +185,27 @@ func DeletePosStore(c *fiber.Ctx) error {
 		return c.Next()
 	}
 
-	filter := bson.M{
+	filter := fiber.Map{
 		"account_id": data.Delete.Account_id,
 		"store_id":   data.Delete.Store_id,
 	}
 
 	update := bson.M{
-		"is_deleted": true}
+		"is_deleted": false}
 
-	res, err := mgm.CollectionByName("stores").UpdateOne(context.Background(), filter, bson.M{"$set": update})
-	if err != nil {
-		c.Locals("status", false)
-		c.Locals("message", "error while Deleting the data")
-		c.Locals("error_obj", errorCodes.Error_codes("ERROR_WHILE_DATA_UPDATE"))
+	var s models.PosStoresSchema
+
+	res := s.UpdateStore(filter, update)
+	if !res["status"].(bool) {
+		c.Locals("status", res["status"])
+		c.Locals("message", res["message"])
+		c.Locals("error_obj", errorCodes.Error_codes(res["error_code"].(string)))
 		return c.Next()
 	}
 
 	c.Locals("status", true)
 	c.Locals("message", "Deletion successfully done")
-	c.Locals("data", res)
+	c.Locals("data", data)
 
 	return c.Next()
 }
